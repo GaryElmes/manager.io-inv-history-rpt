@@ -1,0 +1,577 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio valuation</title>
+<style>
+  :root{
+    --ink:#1c2b33; --muted:#5c6b73; --line:#e3e8ea; --surface:#fdfdfc;
+    --accent:#0e6e6b; --accent-soft:#e6f1f0;
+    --warn:#9a6700; --warn-soft:#fff4d6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:14px 2px;
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:transparent}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+        padding:14px 16px;border-bottom:1px solid var(--line)}
+  h1{font-size:15px;font-weight:600;margin:0}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .datebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;
+           background:var(--accent-soft);border-bottom:1px solid var(--line)}
+  .datebar label{font-size:12px;font-weight:600;color:var(--accent);
+                 text-transform:uppercase;letter-spacing:.06em}
+  .datebar input[type=text]{font:inherit;padding:5px 9px;border:1px solid var(--accent);
+                            border-radius:6px;background:#fff;color:var(--ink);
+                            font-variant-numeric:tabular-nums}
+  .badinput{border-color:#a4262c !important;background:#fdecea !important;
+            transition:background .3s,border-color .3s}
+  .datebar select{font:inherit;font-size:13px;padding:5px 9px;border:1px solid var(--accent);
+                  border-radius:6px;background:#fff;color:var(--ink);max-width:280px}
+  .acctwrap{margin-left:auto;display:flex;gap:8px;align-items:center}
+  #acctsel{display:flex;gap:8px;align-items:center}
+  .tick{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink);
+        cursor:pointer;white-space:nowrap}
+  .tick input{accent-color:var(--accent);cursor:pointer}
+  .chip{font:inherit;font-size:12px;padding:4px 10px;border:1px solid var(--accent);
+        border-radius:999px;background:#fff;color:var(--accent);cursor:pointer}
+  .chip:hover{background:var(--accent);color:#fff}
+  .chip:focus-visible,input:focus-visible,select:focus-visible,button:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{padding:8px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  th[data-k]{cursor:pointer;user-select:none}
+  th[data-k]:hover{color:var(--accent)}
+  td .code{color:var(--muted);font-size:12px;margin-left:6px}
+  td .meta{color:var(--muted);font-size:12px}
+  tr.stale td .meta.pdate{color:var(--warn)}
+  tr.zero td{color:var(--muted)}
+  tfoot td{font-weight:600;border-top:2px solid var(--ink);border-bottom:none;
+           color:var(--accent);font-size:15px}
+  .note{padding:10px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+  .warnbox{margin:12px 16px;padding:10px 12px;background:var(--warn-soft);
+           border:1px solid #e8d8a0;border-radius:6px;font-size:12.5px;color:var(--warn)}
+  .btn{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);
+       border-radius:6px;background:#fff;cursor:pointer;color:var(--ink)}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  details{padding:0 16px 12px;font-size:12px;color:var(--muted)}
+  details pre{background:#f4f6f7;border:1px solid var(--line);border-radius:6px;
+              padding:10px;overflow:auto;max-height:200px}
+  .state{padding:28px 16px;text-align:center;color:var(--muted)}
+  tbody tr:hover{background:#f6f9f9}
+  @media (max-width:640px){ th.opt,td.opt{display:none} }
+</style>
+
+<div class="card">
+  <div class="head">
+    <div>
+      <h1>Portfolio valuation</h1>
+      <div class="sub">Quantity, market price and exchange rate all as at the chosen date</div>
+    </div>
+    <div>
+      <button class="btn" id="refresh">Refresh data</button>
+      <button class="btn" id="csv" disabled>Download CSV</button>
+    </div>
+  </div>
+
+  <div class="datebar">
+    <label for="asat">Value as at</label>
+    <input type="text" id="asat" size="12" autocomplete="off">
+    <button class="chip" id="pickdate" title="Pick a date">📅</button>
+    <input type="date" id="asatpick" tabindex="-1"
+           style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
+    <span id="chips"></span>
+    <span class="acctwrap">
+      <label class="tick"><input type="checkbox" id="hidezero"> Hide zero holdings</label>
+      <span id="acctsel">
+        <label for="ctrlacct">Account</label>
+        <select id="ctrlacct"><option value="">All control accounts</option></select>
+      </span>
+    </span>
+  </div>
+
+  <div id="body"><div class="state">Loading…</div></div>
+
+  <div class="note">
+    Quantity as at date = starting balance + buys − sells up to and including the date,
+    with direction taken from the document type (journal entries per debit/credit line).
+    Prices and exchange rates are the latest recorded on or before the date.
+    Special-account holdings are not included.
+  </div>
+  <details><summary>Load log</summary><pre id="diagout">—</pre></details>
+</div>
+
+<script>
+/* ═══════ CONFIG ═══════════════════════════════════════════════════════════
+   Endpoint names verified against Manager 26.x api4 (Jul 2026). If a future
+   Manager update renames one, the load log below will name the failure.     */
+const CONFIG = {
+  locale: null,                    // null = browser locale (navigator.language)
+  baseCurrency: 'NZD',             // fallback only — detected from Manager at load
+  fyEnd: { month: 3, day: 31 },   // NZ balance date
+  staleDays: 35,                   // price older than this vs as-at date → amber
+  pageSize: 50,                    // api4 batch page cap; paged with skip=
+  endpoints: {
+    investments:      'investment-batch',
+    startingBalances: 'investment-starting-balance-batch',
+    controlAccounts:  'control-account-for-investments-batch',
+    marketPrices:     'investment-market-price-batch',
+    exchangeRates:    'exchange-rate-batch',
+    currencies:       'foreign-currency-batch',
+    baseCurrency:     'base-currency',
+    dateNumberFormat: 'date-and-number-format',
+  },
+  /* Quantity direction comes from the document type; the sign the user typed
+     on the line is ignored, matching Manager's own behaviour. sign 0 =
+     journal entries, signed per line by debit/credit. */
+  txSources: [
+    { label:'Payments',          name:'payment-batch',          sign:+1 },
+    { label:'Receipts',          name:'receipt-batch',          sign:-1 },
+    { label:'Journal entries',   name:'journal-entry-batch',    sign: 0 },
+    { label:'Purchase invoices', name:'purchase-invoice-batch', sign:+1 },
+    { label:'Sales invoices',    name:'sales-invoice-batch',    sign:-1 },
+  ],
+};
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+const $=id=>document.getElementById(id);
+const diag=[]; const log=m=>{diag.push(m);$('diagout').textContent=diag.join('\n');};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const LOCALE=CONFIG.locale||navigator.language||'en-NZ';
+/* Formatting state — defaults derive from the browser locale, then Manager's
+   Date and Number Format + Base Currency settings override them at load. */
+let BASECUR=CONFIG.baseCurrency, BASEDP=null, BASEPREFIX='', BASESUFFIX='',
+    GROUPSEP=',', DECSEP='.', DATEFMT=null;
+try{
+  const parts=new Intl.NumberFormat(LOCALE).formatToParts(1234567.89);
+  GROUPSEP=(parts.find(p=>p.type==='group')||{}).value??',';
+  DECSEP=(parts.find(p=>p.type==='decimal')||{}).value??'.';
+}catch(_){}
+function fmtNum(v,minDp,maxDp){
+  if(!isFinite(v))return '';
+  const neg=v<0;
+  let [i,f]=Math.abs(v).toFixed(maxDp).split('.');
+  if(f&&minDp<maxDp)f=f.replace(/0+$/,'');
+  if(f&&f.length<minDp)f=f.padEnd(minDp,'0');
+  i=i.replace(/\B(?=(\d{3})+(?!\d))/g,'\u0000').split('\u0000').join(GROUPSEP);
+  return (neg?'-':'')+i+(f?DECSEP+f:'');
+}
+const fmtMoney=v=>{
+  const dp=BASEDP??2;
+  if(!BASEPREFIX&&!BASESUFFIX)return fmtNum(v,dp,dp);
+  return (v<0?'-':'')+BASEPREFIX+fmtNum(Math.abs(v),dp,dp)+BASESUFFIX;
+};
+const fmtQty=v=>fmtNum(v,0,4);
+function fmtDate(iso){
+  if(!iso||!DATEFMT)return iso;
+  const [y,m,d]=String(iso).slice(0,10).split('-');
+  return DATEFMT
+    .replace(/yyyy/,y).replace(/yy(?!y)/,y.slice(-2))
+    .replace(/MM/,m).replace(/M(?!M)/,String(+m))
+    .replace(/dd/,d).replace(/d(?!d)/,String(+d));
+}
+/* The as-at date: canonical ISO in ASAT; the visible field shows/accepts
+   the configured format (native date inputs cannot be reformatted).
+   All date maths uses local calendar components — never toISOString(),
+   which shifts the date across the UTC boundary in non-UTC timezones. */
+function iso(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+
+         '-'+String(d.getDate()).padStart(2,'0');
+}
+let ASAT=iso(new Date());
+function setAsat(x){ASAT=x;const el=$('asat');if(el)el.value=fmtDate(x);}
+function parseDate(text){
+  text=String(text).trim();
+  let m=text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);          // ISO always accepted
+  if(!m&&DATEFMT){
+    const order=[]; let pat='';
+    for(const tok of DATEFMT.match(/yyyy|yy|MM|M|dd|d|./g)||[]){
+      if(tok==='yyyy'){order.push('y4');pat+='(\\d{4})';}
+      else if(tok==='yy'){order.push('y2');pat+='(\\d{2})';}
+      else if(tok==='MM'||tok==='M'){order.push('m');pat+='(\\d{1,2})';}
+      else if(tok==='dd'||tok==='d'){order.push('d');pat+='(\\d{1,2})';}
+      else pat+=tok.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    }
+    const mm=text.match(new RegExp('^'+pat+'$'));
+    if(mm){
+      const v={};order.forEach((k,i)=>v[k]=mm[i+1]);
+      const y=v.y4??(v.y2?String(2000+ +v.y2):null);
+      if(y&&v.m&&v.d)m=[null,y,v.m,v.d];
+    }
+  }
+  if(!m)return null;
+  const y=+m[1],mo=+m[2],d=+m[3];
+  const dt=new Date(Date.UTC(y,mo-1,d));   // timezone-neutral component check
+  if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==mo-1||dt.getUTCDate()!==d)return null;
+  return String(y)+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+}
+
+let investments=[], startBalances=new Map(), accountNames=new Map(),
+    currencyCodes=new Map(),
+    movements=[], priceIdx=new Map(), fxIdx=new Map(),
+    lastRows=null, sortKey='value', sortDir=-1;
+
+/* ── Manager custom-button hosting: same origin, session cookies, q param ── */
+const Q=new URLSearchParams(location.search).get('q');
+if(!/custom-button-html/i.test(location.pathname)||!Q){
+  $('body').innerHTML='<div class="state">This report runs inside Manager. '+
+    'Add it via Settings → Custom Buttons (Source = URL, placement = /investments), '+
+    'then open the Investments tab and expand the box at the bottom.</div>';
+}else{
+  loadData();
+}
+
+/* ── data access ── */
+/* api4 responses arrive in wrapped shapes — normalize to flat records.
+   (This was proven necessary in the debug build: records unwrap from
+   {key, item:{...}}, and top level may be an array or keyed object.) */
+const unwrap=r=>(r&&r.item&&typeof r.item==='object')?Object.assign({key:r.key},r.item):r;
+function asArray(x){
+  let a=null;
+  if(Array.isArray(x))a=x;
+  else if(x&&Array.isArray(x.data))a=x.data;
+  else if(x&&Array.isArray(x.items))a=x.items;
+  else if(x&&typeof x==='object')
+    a=Object.entries(x).map(([k,v])=>
+      (v&&typeof v==='object')?Object.assign({key:k},v):{key:k,value:v});
+  return a?a.map(unwrap):[];
+}
+async function fetchAll(name){
+  const all=[]; let skip=0;
+  for(;;){
+    const url=location.origin+'/api4/'+name+'?q='+encodeURIComponent(Q)+
+              (skip?'&skip='+skip:'');
+    const r=await fetch(url,{credentials:'same-origin',cache:'no-store'});
+    if(!r.ok)throw new Error(name+' → HTTP '+r.status);
+    const arr=asArray(await r.json());
+    all.push(...arr);
+    if(arr.length<CONFIG.pageSize)break;
+    skip+=arr.length;
+    if(skip>50000){log('WARNING: '+name+' truncated at '+skip+' records');break;}
+  }
+  const seen=new Set();
+  return all.filter(r=>{const k=r&&r.key;if(!k)return true;
+    if(seen.has(k))return false;seen.add(k);return true;});
+}
+const day10=d=>String(d||'').slice(0,10);
+
+async function loadData(){
+  $('body').innerHTML='<div class="state">Loading data…</div>';
+  diag.length=0;
+  /* Single-object GET (batch endpoints go through fetchAll instead). */
+  async function rawGet(name){
+    const r=await fetch(location.origin+'/api4/'+name+'?q='+encodeURIComponent(Q),
+                        {credentials:'same-origin',cache:'no-store'});
+    if(!r.ok)throw new Error(name+' HTTP '+r.status);
+    const t=await r.text();
+    try{return JSON.parse(t);}
+    catch(_){throw new Error(name+' non-JSON: '+t.slice(0,80).replace(/\s+/g,' '));}
+  }
+  /* Currency codes (foreign list) — used for price/FX display and CSV. */
+  currencyCodes=new Map();
+  try{
+    for(const c of await fetchAll(CONFIG.endpoints.currencies)){
+      const code=c.code||c.symbol;
+      if(c.key&&code)currencyCodes.set(c.key,String(code).toUpperCase());
+    }
+    log('currencies: '+currencyCodes.size);
+  }catch(e){log('currencies unavailable: '+e.message);}
+  /* Base currency: code, decimal places, prefix/suffix. CONFIG is the fallback. */
+  try{
+    const bc=await rawGet(CONFIG.endpoints.baseCurrency);
+    if(bc&&typeof bc.code==='string'&&/^[A-Za-z]{3}$/.test(bc.code)){
+      BASECUR=bc.code.toUpperCase();
+      if(Number.isInteger(bc.decimalPlaces))BASEDP=bc.decimalPlaces;
+      BASEPREFIX=bc.prefix??bc.displayPrefix??'';
+      BASESUFFIX=bc.suffix??bc.displaySuffix??'';
+      log('base currency: '+BASECUR+(BASEDP!==null?' ('+BASEDP+' dp)':'')+
+          (BASEPREFIX?' prefix "'+BASEPREFIX+'"':'')+(BASESUFFIX?' suffix "'+BASESUFFIX+'"':''));
+    }else{
+      log('base currency: '+BASECUR+' (CONFIG fallback — unexpected record: '+
+          JSON.stringify(bc).slice(0,120)+')');
+    }
+  }catch(e){log('base currency: '+BASECUR+' (CONFIG fallback — '+e.message+')');}
+  /* Date and number formats (shape confirmed): dateFormat is a plain pattern
+     string; numberFormat is base64 protobuf — field 1 decimal separator,
+     field 2 group separator, field 3 group size. */
+  function decodeNumberFormat(b64){
+    try{
+      const bin=atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+      const bytes=[...bin].map(c=>c.charCodeAt(0));
+      let i=0; const out={};
+      while(i<bytes.length){
+        const tag=bytes[i++], field=tag>>3, wire=tag&7;
+        if(wire===2){const len=bytes[i++]; out[field]=bin.slice(i,i+len); i+=len;}
+        else if(wire===0){let v=0,s=0;for(;;){const b=bytes[i++];v|=(b&127)<<s;if(!(b&128))break;s+=7;}out[field]=v;}
+        else break;
+      }
+      return out;
+    }catch(_){return null;}
+  }
+  try{
+    const rec=await rawGet(CONFIG.endpoints.dateNumberFormat);
+    if(rec&&typeof rec.dateFormat==='string'&&/d/.test(rec.dateFormat))
+      DATEFMT=rec.dateFormat;
+    if(rec&&typeof rec.numberFormat==='string'){
+      const p=decodeNumberFormat(rec.numberFormat);
+      if(p&&typeof p[1]==='string'&&typeof p[2]==='string'){
+        DECSEP=p[1]; GROUPSEP=p[2];
+      }else{
+        log('numberFormat undecodable: '+rec.numberFormat);
+      }
+    }
+    log('formats: date "'+(DATEFMT||'ISO')+'", decimal "'+DECSEP+'", group "'+GROUPSEP+'"');
+    setAsat(ASAT);   // redisplay the as-at field in the configured format
+  }catch(e){log('date/number format: defaults ('+e.message+')');}
+  try{
+    const [inv,sb,accts,prices,fxRates,...txSets]=await Promise.all([
+      fetchAll(CONFIG.endpoints.investments),
+      fetchAll(CONFIG.endpoints.startingBalances),
+      fetchAll(CONFIG.endpoints.controlAccounts),
+      fetchAll(CONFIG.endpoints.marketPrices),
+      fetchAll(CONFIG.endpoints.exchangeRates),
+      ...CONFIG.txSources.map(s=>fetchAll(s.name)),
+    ]);
+    investments=inv;
+    log('investments: '+inv.length);
+
+    startBalances=new Map();
+    for(const r of sb){
+      const q=parseFloat(r.startingBalance);
+      if(r.investment&&isFinite(q)&&q!==0)
+        startBalances.set(r.investment,(startBalances.get(r.investment)||0)+q);
+    }
+    log('starting balances: '+startBalances.size);
+
+    accountNames=new Map();
+    for(const a of accts)if(a.key&&a.name)accountNames.set(a.key,String(a.name));
+    log('control accounts: '+accountNames.size);
+
+    priceIdx=new Map();
+    for(const p of prices){
+      const v=parseFloat(p.marketPrice);
+      if(!p.investment||!p.date||!isFinite(v))continue;
+      if(!priceIdx.has(p.investment))priceIdx.set(p.investment,[]);
+      priceIdx.get(p.investment).push({date:day10(p.date),val:v,
+        rate:parseFloat(p.exchangeRate),rateInv:p.exchangeRateIsInverse===true,
+        cur:p.currency||null});
+    }
+    for(const a of priceIdx.values())a.sort((x,y)=>x.date<y.date?-1:1);
+    log('market prices: '+prices.length);
+
+    fxIdx=new Map();
+    for(const r of fxRates){
+      const v=parseFloat(r.exchangeRateValue);
+      if(!r.currency||!r.date||!isFinite(v))continue;
+      if(!fxIdx.has(r.currency))fxIdx.set(r.currency,[]);
+      fxIdx.get(r.currency).push({date:day10(r.date),val:v,
+        rateInv:r.exchangeRateIsInverse===true});
+    }
+    for(const a of fxIdx.values())a.sort((x,y)=>x.date<y.date?-1:1);
+    log('exchange rates: '+fxRates.length);
+
+    movements=[];
+    CONFIG.txSources.forEach((src,i)=>{
+      let found=0;
+      for(const tx of txSets[i]){
+        const d=day10(tx.date||tx.issueDate);
+        if(!d)continue;
+        for(const ln of (tx.lines||[])){
+          if(!ln.investment)continue;
+          const q=parseFloat(ln.qty);
+          if(!isFinite(q)||q===0)continue;
+          let sign=src.sign;
+          if(sign===0){
+            const cr=parseFloat(ln.credit), dr=parseFloat(ln.debit);
+            sign=(isFinite(cr)&&cr!==0&&!(isFinite(dr)&&dr!==0))?-1:+1;
+          }
+          movements.push({inv:ln.investment,date:d,qty:sign*Math.abs(q)});
+          found++;
+        }
+      }
+      log(src.label.toLowerCase()+': '+txSets[i].length+' documents, '+found+' investment lines');
+    });
+    movements.sort((a,b)=>a.date<b.date?-1:1);
+
+    buildAcctFilter();
+    render();
+  }catch(err){
+    log('LOAD FAILED: '+err.message);
+    $('body').innerHTML='<div class="state">Data load failed: '+esc(err.message)+
+      '<br>A Manager update may have renamed an endpoint — see the load log below, '+
+      'and adjust CONFIG.endpoints at the top of this file.</div>';
+  }
+}
+
+/* ── valuation ── */
+function latestOnOrBefore(arr,day){
+  let best=null; for(const p of arr||[]){if(p.date<=day)best=p;else break;} return best;
+}
+function qtyAsAt(invKey,day){
+  let q=startBalances.get(invKey)||0;
+  for(const m of movements){
+    if(m.date>day)break;
+    if(m.inv===invKey)q+=m.qty;
+  }
+  return q;
+}
+
+/* ── control-account filter ── */
+function buildAcctFilter(){
+  const sel=$('ctrlacct'); const prev=sel.value;
+  const ids=new Set();
+  for(const inv of investments)if(inv.controlAccount)ids.add(inv.controlAccount);
+  $('acctsel').style.display=ids.size>1?'':'none';
+  if(ids.size<2){sel.value='';return;}
+  const opts=[...ids].map(id=>({id,label:accountNames.get(id)||('Account …'+id.slice(-6))}))
+    .sort((a,b)=>a.label.localeCompare(b.label));
+  sel.innerHTML='<option value="">All control accounts</option>'+
+    opts.map(o=>`<option value="${o.id}">${esc(o.label)}</option>`).join('');
+  if([...ids].includes(prev))sel.value=prev;
+}
+$('ctrlacct').addEventListener('change',()=>investments.length&&render());
+$('hidezero').addEventListener('change',()=>investments.length&&render());
+
+/* ── render ── */
+function render(){
+  const day=ASAT;
+  const acctFilter=$('ctrlacct').value;
+  const hideZero=$('hidezero').checked;
+  const rows=[]; let anyFx=false;
+
+  for(const inv of investments){
+    if(acctFilter&&inv.controlAccount!==acctFilter)continue;
+    const qty=qtyAsAt(inv.key,day);
+    if(hideZero&&Math.abs(qty)<1e-9)continue;
+    const px=latestOnOrBefore(priceIdx.get(inv.key),day);
+    let fx=1,fxInfo=null,isFx=false;
+    if(px&&px.cur){
+      isFx=true;anyFx=true;
+      if(isFinite(px.rate)&&px.rate>0){
+        fx=px.rateInv?1/px.rate:px.rate;fxInfo={date:px.date};
+      }else{
+        const r=latestOnOrBefore(fxIdx.get(px.cur),day);
+        if(r){fx=r.rateInv?1/r.val:r.val;fxInfo=r;}else fx=null;
+      }
+    }
+    const value=(px&&fx!==null)?qty*px.val*fx:(qty===0?0:null);
+    rows.push({name:inv.name||'(unnamed)',code:inv.code||'',isFx,qty,px,fx,fxInfo,value,
+               curCode:px&&px.cur?(currencyCodes.get(px.cur)||''):''});
+  }
+
+  const sortVal=r=>{switch(sortKey){
+    case 'name': return r.name.toLowerCase();
+    case 'qty':  return r.qty;
+    case 'price':return r.px?r.px.val:null;
+    case 'pdate':return r.px?r.px.date:null;
+    case 'fx':   return r.isFx?r.fx:null;
+    default:     return r.value;
+  }};
+  rows.sort((a,b)=>{
+    const x=sortVal(a),y=sortVal(b);
+    if(x==null&&y==null)return 0;
+    if(x==null)return 1;
+    if(y==null)return -1;
+    if(typeof x==='string')return sortDir*x.localeCompare(y);
+    return sortDir*((x>y)-(x<y));
+  });
+
+  const total=rows.reduce((s,r)=>s+(r.value||0),0);
+  const unpriced=rows.filter(r=>r.value===null&&r.qty!==0).length;
+  lastRows={rows,total,day}; $('csv').disabled=false;
+
+  const sc=new Date(day+'T00:00:00Z');
+  sc.setUTCDate(sc.getUTCDate()-CONFIG.staleDays);
+  const staleISO=sc.toISOString().slice(0,10);   // pure-UTC in and out — no TZ shift
+
+  const arrow=k=>sortKey===k?(sortDir<0?' ▼':' ▲'):'';
+  const H=(k,label,cls)=>`<th${cls?' class="'+cls+'"':''} data-k="${k}">${label}${arrow(k)}</th>`;
+  let html='<table><thead><tr>'+
+    H('name','Investment')+H('qty','Qty as at')+H('price','Price')+
+    H('pdate','Price date','opt')+
+    (anyFx?H('fx','FX'):'')+
+    H('value','Value ('+BASECUR+')')+H('value','%','opt')+
+    '</tr></thead><tbody>';
+  for(const r of rows){
+    const cls=[r.value===null||r.qty===0?'zero':'',
+               r.px&&r.px.date<staleISO?'stale':''].join(' ');
+    html+=`<tr class="${cls}"><td>${esc(r.name)}`+
+      (r.code?`<span class="code">${esc(r.code)}</span>`:'')+'</td>'+
+      `<td>${fmtQty(r.qty)}</td>`+
+      `<td>${r.px?fmtQty(r.px.val)+' <span class="meta">'+esc(r.curCode||BASECUR)+'</span>':'no price ≤ date'}</td>`+
+      `<td class="opt"><span class="meta pdate">${r.px?fmtDate(r.px.date):'—'}</span></td>`+
+      (anyFx?`<td>${!r.isFx?'—':
+        (r.fx!==null?fmtQty(r.fx)+' <span class="meta">'+(r.fxInfo?fmtDate(r.fxInfo.date):'')+'</span>':'no rate')}</td>`:'')+
+      `<td>${r.value!==null?fmtMoney(r.value):'—'}</td>`+
+      `<td class="opt">${r.value&&total?fmtNum(100*r.value/total,1,1):'—'}</td></tr>`;
+  }
+  const cols=4+(anyFx?1:0);
+  html+=`</tbody><tfoot><tr><td colspan="${cols}">Total as at ${fmtDate(day)}</td>`+
+        `<td>${fmtMoney(total)}</td><td class="opt"></td></tr></tfoot></table>`;
+  if(unpriced)html+=`<div class="warnbox">${unpriced} holding(s) with units held have no market `+
+    `price recorded on or before ${fmtDate(day)} and are excluded from the total.</div>`;
+  $('body').innerHTML=html;
+  $('body').querySelectorAll('th[data-k]').forEach(th=>
+    th.addEventListener('click',()=>{
+      const k=th.dataset.k;
+      if(sortKey===k)sortDir=-sortDir;
+      else{sortKey=k;sortDir=(k==='name'||k==='pdate')?1:-1;}
+      render();
+    }));
+}
+
+/* ── date bar ── */
+function buildChips(){
+  const today=new Date();
+  const lastME=new Date(today.getFullYear(),today.getMonth(),0);
+  const fy=new Date(today.getFullYear(),CONFIG.fyEnd.month-1,CONFIG.fyEnd.day);
+  if(fy>today)fy.setFullYear(fy.getFullYear()-1);
+  const priorFy=new Date(fy);priorFy.setFullYear(fy.getFullYear()-1);
+  const chips=[['Today',iso(today)],['Last month end',iso(lastME)],
+    ['FY end '+iso(fy).slice(0,4),iso(fy)],['FY end '+iso(priorFy).slice(0,4),iso(priorFy)]];
+  $('chips').innerHTML=chips.map(([l,d])=>`<button class="chip" data-d="${d}">${l}</button>`).join(' ');
+  $('chips').addEventListener('click',e=>{
+    const d=e.target.dataset.d;
+    if(d){setAsat(d);if(investments.length)render();}
+  });
+  setAsat(iso(today));
+}
+buildChips();
+$('asat').addEventListener('change',()=>{
+  const parsed=parseDate($('asat').value);
+  if(parsed){setAsat(parsed);}
+  else{
+    setAsat(ASAT);                       // revert invalid input
+    $('asat').classList.add('badinput');
+    setTimeout(()=>$('asat').classList.remove('badinput'),900);
+  }
+  if(investments.length)render();
+});
+$('asat').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
+$('pickdate').addEventListener('click',()=>{
+  const p=$('asatpick'); p.value=ASAT;
+  if(p.showPicker)p.showPicker(); else p.click();
+});
+$('asatpick').addEventListener('change',()=>{
+  if($('asatpick').value){setAsat($('asatpick').value);if(investments.length)render();}
+});
+$('refresh').addEventListener('click',loadData);
+
+/* ── CSV ── */
+$('csv').addEventListener('click',()=>{
+  if(!lastRows)return;
+  const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
+  const L=[['Investment','Code','Currency','Qty as at','Price','Price date',
+            'FX rate','FX date','Value '+BASECUR].join(',')];
+  for(const r of lastRows.rows)
+    L.push([q(r.name),q(r.code),r.curCode||BASECUR,r.qty,r.px?r.px.val:'',r.px?fmtDate(r.px.date):'',
+            r.isFx?(r.fx??''):'',r.fxInfo?fmtDate(r.fxInfo.date):'',r.value??''].join(','));
+  L.push(['Total','','','','','','','',lastRows.total].join(','));
+  const blob=new Blob([L.join('\n')],{type:'text/csv'});
+  const a=Object.assign(document.createElement('a'),
+    {href:URL.createObjectURL(blob),download:'portfolio-valuation-'+lastRows.day+'.csv'});
+  a.click();URL.revokeObjectURL(a.href);
+});
+</script>
