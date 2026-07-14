@@ -56,7 +56,7 @@ block and says so in the load log.
 1. Host `portfolio-valuation.html` anywhere reachable by your browser — or use
    this repository's GitHub Pages URL directly.
 2. In Manager: **Settings → Custom Buttons → New**
-   - Source: **URL**, pointing at the hosted file
+   - Source: https://garyelmes.github.io/manager.io-inv-history-rpt/portfolio-valuation.html
    - Placement: `/investments`
 3. Open the **Investments** tab and expand the panel at the bottom.
 
